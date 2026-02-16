@@ -1,5 +1,7 @@
 # pi-idle-notify
 
+An extension for the [pi coding agent](https://github.com/badlogic/pi-mono).
+
 Desktop notifications (plus optional sounds) when Pi finishes a response and is idle. vibecoded on pi with GPT 5.2 Codex in ~15 minutes. Should theoretically work cross-platform, tested on Linux.
 
 I don't know how much I plan on updating this, so probably not much. Caveat emptor.
