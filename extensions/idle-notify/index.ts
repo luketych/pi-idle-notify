@@ -54,6 +54,7 @@ const DEFAULT_SOUND_PLAYERS = ["mpv", "ffplay", "paplay", "aplay", "mpg123", "pl
 
 export default function idleNotifyExtension(pi: ExtensionAPI) {
 	let state: ExtensionState | null = null;
+	let notifyTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const refreshState = (cwd: string, hasUI: boolean) => {
 		const config = normalizeConfig(loadConfig(cwd));
@@ -67,40 +68,51 @@ export default function idleNotifyExtension(pi: ExtensionAPI) {
 		};
 	};
 
+	const scheduleNotification = (messages: any[], ctx: any) => {
+		if (notifyTimer) clearTimeout(notifyTimer);
+		notifyTimer = setTimeout(() => {
+			void (async () => {
+				notifyTimer = null;
+				if (!state) refreshState(ctx.cwd, ctx.hasUI);
+				if (!state) return;
+
+				const config = state.config;
+				if (!config.enabled) return;
+				if (ctx.hasPendingMessages?.() || (ctx.isIdle && !ctx.isIdle())) return;
+
+				const now = Date.now();
+				if (config.minIntervalMs && now - state.lastNotifyAt < config.minIntervalMs) return;
+
+				const status = classifyStatus(messages);
+				if (config.notifyOn && !config.notifyOn.includes(status)) return;
+
+				const preview = config.includePreview ? buildPreview(messages, config.previewMaxLength) : "";
+				const { title, body } = buildNotification(config, status, preview);
+
+				await sendNotification(pi, state.notifier, title, body, status);
+				await playSound(pi, state.player, config, status, ctx.cwd);
+
+				state.lastNotifyAt = now;
+			})();
+		}, 0);
+	};
+
 	pi.on("session_start", async (_event, ctx) => {
 		refreshState(ctx.cwd, ctx.hasUI);
 		if (!state) return;
 		maybeWarnUser(state, ctx.hasUI, ctx);
 	});
 
-	pi.on("session_switch", async (_event, ctx) => {
-		refreshState(ctx.cwd, ctx.hasUI);
-		if (!state) return;
-		maybeWarnUser(state, ctx.hasUI, ctx);
+	pi.on("session_shutdown", async () => {
+		if (notifyTimer) {
+			clearTimeout(notifyTimer);
+			notifyTimer = null;
+		}
 	});
 
 	pi.on("agent_end", async (event, ctx) => {
-		if (!state) refreshState(ctx.cwd, ctx.hasUI);
-		if (!state) return;
-		const config = state.config;
-		if (!config.enabled) return;
-		if (ctx.hasPendingMessages?.() || (ctx.isIdle && !ctx.isIdle())) return;
-
-		const now = Date.now();
-		if (config.minIntervalMs && now - state.lastNotifyAt < config.minIntervalMs) return;
-
-		const status = classifyStatus(event.messages ?? []);
-		if (config.notifyOn && !config.notifyOn.includes(status)) return;
-
-		const preview = config.includePreview ? buildPreview(event.messages ?? [], config.previewMaxLength) : "";
-		const { title, body } = buildNotification(config, status, preview);
-
-		await sendNotification(pi, state.notifier, title, body, status);
-		await playSound(pi, state.player, config, status, ctx.cwd);
-
-		state.lastNotifyAt = now;
+		scheduleNotification(event.messages ?? [], ctx);
 	});
-
 }
 
 function maybeWarnUser(state: ExtensionState, hasUI: boolean, ctx: { ui?: any }) {
