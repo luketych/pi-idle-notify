@@ -34,7 +34,7 @@ Then run `/reload` in pi.
 
 ## Usage
 
-Once installed, the extension listens for `agent_end` and sends a notification when Pi is idle.
+Once installed, the extension waits for Pi's `agent_settled` event and sends a notification only when the parent session is idle and ready for input. It keeps the existing status classification and sound selection behavior.
 
 To test quickly:
 1. Run `/reload`
@@ -81,6 +81,22 @@ Add settings to `~/.pi/agent/settings.json` (global) or `.pi/settings.json` (pro
 - `includePreview`: Include a short preview of the last assistant message.
 - `previewMaxLength`: Max preview length (chars).
 - `minIntervalMs`: Debounce repeated notifications.
+
+No extra configuration is required for the supported subagent integration.
+
+## Subagent integration
+
+This version supports the installed `pi-subagents` package API verified against `pi-subagents` 0.67.0 on Pi 0.85.1.
+
+- Child sessions are suppressed with the package's child markers: `PI_SUBAGENT_CHILD=1` for background runner processes, and `PI_SUBAGENT_PARENT_SESSION` compared with the current `ctx.sessionManager.getSessionId()` for foreground in-process children.
+- Parent sessions track `subagent:async-started`, `subagent:async-complete`, and `subagent:foreground-complete` on `pi.events`, scoped by the payload `sessionId` and stable `id`/`runId`.
+- Reload/startup recovery reads active async runs from the `pi-subagents` artifact layout: `$PI_SUBAGENTS_TEMP_ROOT/async-subagent-runs` (or the package's default temp root), `.active-runs`, and each run's `status.json`.
+- Completion delivery remains silent until the parent processes the result and settles. `pi-subagents` delivers the completion message before emitting `subagent:async-complete`, so idle-notify invalidates pending notifications on subagent completion and never notifies merely because the active run count reached zero.
+
+Limitations:
+
+- The artifact fallback is specific to `pi-subagents` 0.67.x. If that package changes its temp layout or event payloads, update this integration after checking the installed source.
+- Other child-session launchers are not automatically detected unless they use the same environment markers or avoid loading this extension in child sessions.
 
 ## Linux notes
 

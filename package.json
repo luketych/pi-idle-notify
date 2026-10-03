@@ -2,8 +2,12 @@
   "name": "pi-idle-notify",
   "version": "0.1.0",
   "description": "Pi extension that sends desktop notifications and optional sounds when the agent is idle.",
+  "type": "module",
   "keywords": ["pi-package", "pi-extension", "notifications"],
   "license": "MIT",
+  "scripts": {
+    "test": "node --experimental-strip-types --test --test-concurrency=1 test/*.test.ts"
+  },
   "pi": {
     "extensions": ["./extensions/idle-notify/index.ts"]
   }
